@@ -5,6 +5,8 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -25,16 +27,27 @@ public class NumberGoUpPlugin extends Plugin
     private Client client;
 
     @Inject
+    private ClientThread clientThread;
+
+    @Inject
     private NumberGoUpConfig config;
 
-    private boolean enabled = false;
-    private Map<Skill, Integer> initialXp = new HashMap<>();
-    private Map<Skill, Integer> currentRealXp = new HashMap<>();
-    private Map<Skill, Integer> currentRealLevel = new HashMap<>();
-    private Map<Skill, Integer> currentRealBoosted = new HashMap<>();
+    @Inject
+    private ConfigManager configManager;
 
-    // XP required for level 99
-    private static final int XP_FOR_99 = 13034431;
+    private boolean enabled = false;
+
+    // Simple session XP tracking - XP gained since last reset for each skill
+    private Map<Skill, Integer> sessionXp = new HashMap<>();
+
+    // Current real XP values (for non-reset skills)
+    private Map<Skill, Integer> currentRealXp = new HashMap<>();
+
+    // Track when plugin was last enabled
+    private Map<Skill, Integer> xpWhenPluginDisabled = new HashMap<>();
+
+    // Track reset button state
+    private boolean lastResetButtonState = false;
 
     @Override
     protected void startUp() throws Exception
@@ -42,44 +55,64 @@ public class NumberGoUpPlugin extends Plugin
         log.info("Number Go Up started! XP Modifier: {}, Reset Mode: {}", config.xpModifier(), config.resetMode());
         enabled = true;
 
-        // Store initial values - with reset mode logic
+        // Load saved session XP
+        loadSessionXp();
+
+        // Initialize session XP for any missing skills
         for (Skill skill : Skill.values())
         {
             if (skill != Skill.OVERALL)
             {
-                int xp = client.getSkillExperience(skill);
-                int level = client.getRealSkillLevel(skill);
-                int boosted = client.getBoostedSkillLevel(skill);
+                int realXp = client.getSkillExperience(skill);
+                currentRealXp.put(skill, realXp);
 
-                initialXp.put(skill, xp);
-                currentRealXp.put(skill, xp);
-                currentRealLevel.put(skill, level);
-                currentRealBoosted.put(skill, boosted);
+                if (!sessionXp.containsKey(skill))
+                {
+                    sessionXp.put(skill, 0);
+                }
+
+                // Clear disabled tracking
+                xpWhenPluginDisabled.remove(skill);
             }
         }
 
+        // Force update all stats on startup
         updateAllStats();
+
+        // Initialize reset button state
+        lastResetButtonState = config.resetProgress();
     }
 
     @Override
     protected void shutDown() throws Exception
     {
         log.info("Number Go Up stopped!");
+
+        // Store current XP values when plugin is disabled
+        if (enabled) {
+            for (Skill skill : Skill.values()) {
+                if (skill != Skill.OVERALL) {
+                    xpWhenPluginDisabled.put(skill, currentRealXp.get(skill));
+                }
+            }
+        }
+
         enabled = false;
 
-        // Restore original stats using the current real values
+        // Save session XP before shutting down
+        saveSessionXp();
+
+        // Restore original stats
         for (Skill skill : Skill.values())
         {
             if (skill != Skill.OVERALL)
             {
                 int realXp = currentRealXp.get(skill);
-                int realLevel = currentRealLevel.get(skill);
-                int realBoosted = currentRealBoosted.get(skill);
 
                 // Restore the actual values
-                client.getRealSkillLevels()[skill.ordinal()] = realLevel;
+                client.getRealSkillLevels()[skill.ordinal()] = Experience.getLevelForXp(realXp);
                 client.getSkillExperiences()[skill.ordinal()] = realXp;
-                client.getBoostedSkillLevels()[skill.ordinal()] = realBoosted;
+                client.getBoostedSkillLevels()[skill.ordinal()] = Experience.getLevelForXp(realXp);
 
                 client.queueChangedSkill(skill);
             }
@@ -87,22 +120,38 @@ public class NumberGoUpPlugin extends Plugin
     }
 
     @Subscribe
-    public void onStatChanged(StatChanged statChanged)
+    public void onGameTick(GameTick event)
     {
-        Skill skill = statChanged.getSkill();
+        // Check if reset button was toggled
+        boolean currentResetButtonState = config.resetProgress();
 
-        // Always update current real values with the actual values from the event
-        currentRealXp.put(skill, statChanged.getXp());
-        currentRealLevel.put(skill, statChanged.getLevel());
-        currentRealBoosted.put(skill, statChanged.getBoostedLevel());
-
-        if (enabled)
+        // Check for rising edge (false -> true transition)
+        if (currentResetButtonState && !lastResetButtonState)
         {
-            updateStat(skill);
+            // Button was just pressed
+            log.info("Reset progress button pressed!");
+
+            // Show confirmation message
+            if (client.getGameState() == GameState.LOGGED_IN && enabled)
+            {
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+                        "Number Go Up! Resetting all progress...", null);
+            }
+
+            // Perform the reset - SIMPLE: set all session XP to 0
+            clearSessionXp();
+
+            // Reset the button state back to false
+            clientThread.invokeLater(() -> {
+                configManager.setConfiguration("numbergoup", "resetProgress", false);
+            });
         }
+
+        // Update the last state
+        lastResetButtonState = currentResetButtonState;
     }
 
-    // NEW: Listen for config changes
+    // Listen for config changes
     @Subscribe
     public void onConfigChanged(ConfigChanged event)
     {
@@ -113,6 +162,7 @@ public class NumberGoUpPlugin extends Plugin
         // If reset mode changed, update all stats immediately
         if (event.getKey().equals("resetMode")) {
             log.info("Reset mode changed to: {}", config.resetMode());
+
             if (enabled) {
                 updateAllStats();
             }
@@ -120,9 +170,28 @@ public class NumberGoUpPlugin extends Plugin
 
         // If a custom reset checkbox changed and we're in custom mode, update that specific skill
         if (event.getKey().startsWith("reset") && config.resetMode() == NumberGoUpConfig.ResetMode.CUSTOM) {
+            // Skip if it's the reset button key
+            if (event.getKey().equals("resetProgress")) {
+                return;
+            }
+
             if (enabled) {
                 // Extract skill name from key (e.g., "resetAttack" -> "ATTACK")
                 String skillName = event.getKey().substring(5); // Remove "reset" prefix
+                try {
+                    Skill skill = Skill.valueOf(skillName.toUpperCase());
+                    updateStat(skill);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Unknown skill from config key: {}", event.getKey());
+                }
+            }
+        }
+
+        // If a threshold value changed and we're in threshold mode, update that skill
+        if (event.getKey().endsWith("Threshold") && config.resetMode() == NumberGoUpConfig.ResetMode.PER_SKILL_THRESHOLD) {
+            if (enabled) {
+                // Extract skill name from key (e.g., "attackThreshold" -> "ATTACK")
+                String skillName = event.getKey().replace("Threshold", "");
                 try {
                     Skill skill = Skill.valueOf(skillName.toUpperCase());
                     updateStat(skill);
@@ -137,6 +206,46 @@ public class NumberGoUpPlugin extends Plugin
             if (enabled) {
                 updateAllStats();
             }
+        }
+    }
+
+    @Subscribe
+    public void onStatChanged(StatChanged statChanged)
+    {
+        Skill skill = statChanged.getSkill();
+
+        // Only update when plugin is enabled
+        if (enabled)
+        {
+            int oldXp = currentRealXp.getOrDefault(skill, 0);
+            int newXp = statChanged.getXp();
+            int xpGained = newXp - oldXp;
+
+            // Update current real XP
+            currentRealXp.put(skill, newXp);
+
+            // Add to session XP if this skill should be reset
+            if (shouldResetSkill(skill) && xpGained > 0)
+            {
+                int currentSessionXp = sessionXp.getOrDefault(skill, 0);
+                sessionXp.put(skill, currentSessionXp + xpGained);
+
+                // Check threshold reset for PER_SKILL_THRESHOLD mode
+                if (config.resetMode() == NumberGoUpConfig.ResetMode.PER_SKILL_THRESHOLD)
+                {
+                    checkThresholdReset(skill);
+                }
+            }
+
+            updateStat(skill);
+
+            // Save session XP
+            saveSessionXp();
+        }
+        else
+        {
+            // Plugin is disabled - track XP for when plugin re-enables
+            xpWhenPluginDisabled.put(skill, statChanged.getXp());
         }
     }
 
@@ -159,55 +268,48 @@ public class NumberGoUpPlugin extends Plugin
         }
 
         int realXp = currentRealXp.get(skill);
-        int initialSkillXp = initialXp.get(skill);
+        int skillSessionXp = sessionXp.getOrDefault(skill, 0);
 
         // Get multiplier for this specific skill (respects override checkbox)
         double xpModifier = getXpModifierForSkill(skill);
 
-        // Calculate session XP with modifier
-        int gainedXp = realXp - initialSkillXp;
-        int modifiedSessionXp = (int)(gainedXp * xpModifier);
-
         // Check if this skill should be reset based on reset mode
-        boolean shouldReset = shouldResetSkill(skill, initialSkillXp);
+        boolean shouldReset = shouldResetSkill(skill);
 
-        int sessionLevel;
         int displayXp;
+        int sessionLevel;
 
         if (shouldReset)
         {
-            // Reset skill behavior - start from level 1 (or 10 for HP)
-            sessionLevel = Experience.getLevelForXp(modifiedSessionXp);
-            displayXp = modifiedSessionXp;
+            // Reset skill behavior - use session XP with multiplier
+            displayXp = (int)(skillSessionXp * xpModifier);
+            sessionLevel = Experience.getLevelForXp(displayXp);
 
-            // Cap level at 99
-            if (sessionLevel > 99)
-            {
+            // For display purposes, cap at level 99 but keep actual XP value
+            if (sessionLevel > 99) {
                 sessionLevel = 99;
-                displayXp = XP_FOR_99;
             }
 
-            // Hitpoints starts at level 10 with 1,154 XP
+            // Hitpoints starts at level 10 (1154 XP)
             if (skill == Skill.HITPOINTS)
             {
                 if (sessionLevel < 10)
                 {
                     sessionLevel = 10;
-                    displayXp = Experience.getXpForLevel(10); // 1,154 XP
+                    // Set display XP to 1154 to show level 10
+                    displayXp = 1154;
                 }
             }
         }
         else
         {
-            // Non-reset skill behavior - show actual progression with multiplier applied
-            displayXp = initialSkillXp + modifiedSessionXp;
-            sessionLevel = Experience.getLevelForXp(displayXp);
+            // Non-reset skill behavior - show actual progression with modifier applied
+            displayXp = (int)(realXp * xpModifier);
+            sessionLevel = Experience.getLevelForXp(realXp);
 
-            // Still cap at 99
-            if (sessionLevel > 99)
-            {
+            // Cap level at 99 for display
+            if (sessionLevel > 99) {
                 sessionLevel = 99;
-                displayXp = XP_FOR_99;
             }
         }
 
@@ -220,16 +322,19 @@ public class NumberGoUpPlugin extends Plugin
     }
 
     // Determine if a skill should be reset based on reset mode
-    private boolean shouldResetSkill(Skill skill, int initialXp)
+    private boolean shouldResetSkill(Skill skill)
     {
         switch (config.resetMode())
         {
             case ALL_SKILLS:
                 return true;
             case ONLY_99S:
-                return initialXp >= XP_FOR_99;
+                int currentXp = currentRealXp.get(skill);
+                return currentXp >= Experience.getXpForLevel(99);
             case CUSTOM:
                 return shouldResetCustomSkill(skill);
+            case PER_SKILL_THRESHOLD:
+                return shouldResetThresholdSkill(skill, sessionXp.getOrDefault(skill, 0));
             default:
                 return true;
         }
@@ -263,7 +368,90 @@ public class NumberGoUpPlugin extends Plugin
             case FIREMAKING: return config.resetFiremaking();
             case WOODCUTTING: return config.resetWoodcutting();
             case FARMING: return config.resetFarming();
+            case SAILING: return config.resetSailing();
             default: return false;
+        }
+    }
+
+    // Check if a skill should be reset in Threshold mode
+    private boolean shouldResetThresholdSkill(Skill skill, int sessionXp)
+    {
+        int threshold = getThresholdForSkill(skill);
+
+        // If threshold is 0, never reset
+        if (threshold <= 0) {
+            return false;
+        }
+
+        // Check if we've crossed the threshold
+        return sessionXp >= threshold;
+    }
+
+    // Check if a skill has crossed its threshold and needs to be reset
+    private void checkThresholdReset(Skill skill)
+    {
+        int threshold = getThresholdForSkill(skill);
+        int currentSessionXp = sessionXp.getOrDefault(skill, 0);
+
+        // If threshold is 0, do nothing
+        if (threshold <= 0) {
+            return;
+        }
+
+        // Check if we've crossed the threshold
+        if (currentSessionXp >= threshold)
+        {
+            log.info("Skill {} reached threshold {} (Session XP: {}), resetting!",
+                    skill.getName(), threshold, currentSessionXp);
+
+            // Reset session XP for this skill
+            sessionXp.put(skill, 0);
+
+            // Save immediately
+            saveSessionXp();
+
+            // Update the skill display
+            updateStat(skill);
+
+            // Show notification
+            if (client.getGameState() == GameState.LOGGED_IN && enabled)
+            {
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+                        "Number Go Up! " + skill.getName() + " has been reset (reached threshold: " + threshold + " XP)", null);
+            }
+        }
+    }
+
+    // Get threshold for a specific skill
+    private int getThresholdForSkill(Skill skill)
+    {
+        switch (skill)
+        {
+            case ATTACK: return config.attackThreshold();
+            case STRENGTH: return config.strengthThreshold();
+            case DEFENCE: return config.defenceThreshold();
+            case RANGED: return config.rangedThreshold();
+            case PRAYER: return config.prayerThreshold();
+            case MAGIC: return config.magicThreshold();
+            case RUNECRAFT: return config.runecraftThreshold();
+            case CONSTRUCTION: return config.constructionThreshold();
+            case HITPOINTS: return config.hitpointsThreshold();
+            case AGILITY: return config.agilityThreshold();
+            case HERBLORE: return config.herbloreThreshold();
+            case THIEVING: return config.thievingThreshold();
+            case CRAFTING: return config.craftingThreshold();
+            case FLETCHING: return config.fletchingThreshold();
+            case SLAYER: return config.slayerThreshold();
+            case HUNTER: return config.hunterThreshold();
+            case MINING: return config.miningThreshold();
+            case SMITHING: return config.smithingThreshold();
+            case FISHING: return config.fishingThreshold();
+            case COOKING: return config.cookingThreshold();
+            case FIREMAKING: return config.firemakingThreshold();
+            case WOODCUTTING: return config.woodcuttingThreshold();
+            case FARMING: return config.farmingThreshold();
+            case SAILING: return config.sailingThreshold();
+            default: return 0;
         }
     }
 
@@ -318,9 +506,80 @@ public class NumberGoUpPlugin extends Plugin
                 return config.overrideWoodcutting() ? config.woodcuttingMultiplier() : config.xpModifier();
             case FARMING:
                 return config.overrideFarming() ? config.farmingMultiplier() : config.xpModifier();
+            case SAILING:
+                return config.overrideSailing() ? config.sailingMultiplier() : config.xpModifier();
             default:
                 return config.xpModifier();
         }
+    }
+
+    // Save session XP to config
+    private void saveSessionXp()
+    {
+        if (!enabled) return;
+
+        for (Skill skill : Skill.values())
+        {
+            if (skill != Skill.OVERALL)
+            {
+                String key = "sessionXp_" + skill.name().toLowerCase();
+                configManager.setConfiguration("numbergoup", key, sessionXp.getOrDefault(skill, 0));
+            }
+        }
+        log.debug("Session XP saved");
+    }
+
+    // Load session XP from config
+    private void loadSessionXp()
+    {
+        for (Skill skill : Skill.values())
+        {
+            if (skill != Skill.OVERALL)
+            {
+                String key = "sessionXp_" + skill.name().toLowerCase();
+                Integer savedXp = configManager.getConfiguration("numbergoup", key, Integer.class);
+                if (savedXp != null)
+                {
+                    sessionXp.put(skill, savedXp);
+                    log.debug("Loaded session XP for {}: {}", skill.getName(), savedXp);
+                }
+                else
+                {
+                    sessionXp.put(skill, 0);
+                }
+            }
+        }
+    }
+
+    // Clear all session XP (reset progress)
+    private void clearSessionXp()
+    {
+        log.info("Clearing all session XP...");
+
+        // Clear all session XP
+        for (Skill skill : Skill.values())
+        {
+            if (skill != Skill.OVERALL)
+            {
+                String key = "sessionXp_" + skill.name().toLowerCase();
+                configManager.unsetConfiguration("numbergoup", key);
+                sessionXp.put(skill, 0);
+            }
+        }
+
+        // Immediately update all stats to show reset state
+        updateAllStats();
+
+        // Save the reset state immediately
+        saveSessionXp();
+
+        // Show a game message to confirm
+        if (client.getGameState() == GameState.LOGGED_IN && enabled)
+        {
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Number Go Up! All progress has been reset.", null);
+        }
+
+        log.info("All progress has been cleared.");
     }
 
     @Provides

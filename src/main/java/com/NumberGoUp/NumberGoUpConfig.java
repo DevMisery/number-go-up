@@ -33,6 +33,119 @@ public interface NumberGoUpConfig extends Config
         return ResetMode.ALL_SKILLS;
     }
 
+    // Reset progress button - we'll handle this differently in the plugin
+    @ConfigItem(
+            keyName = "resetProgress",
+            name = "Reset All Progress",
+            description = "Reset all saved progress and start fresh from current XP",
+            position = 100
+    )
+    default boolean resetProgress()
+    {
+        return false;
+    }
+
+    // Rest of the file remains EXACTLY THE SAME as your original
+    // Per-skill custom XP thresholds for THRESHOLD mode
+    @ConfigSection(name = "Custom XP Thresholds", description = "Set custom XP thresholds for reset (only works with 'Per Skill Threshold' mode)", position = 5, closedByDefault = true)
+    String thresholdSection = "thresholdSection";
+
+    @ConfigItem(keyName = "attackThreshold", name = "Attack XP Threshold", description = "Reset Attack when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 1)
+    @Range(min = 0, max = 200000000)
+    default int attackThreshold() { return 0; }
+
+    @ConfigItem(keyName = "strengthThreshold", name = "Strength XP Threshold", description = "Reset Strength when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 2)
+    @Range(min = 0, max = 200000000)
+    default int strengthThreshold() { return 0; }
+
+    @ConfigItem(keyName = "defenceThreshold", name = "Defence XP Threshold", description = "Reset Defence when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 3)
+    @Range(min = 0, max = 200000000)
+    default int defenceThreshold() { return 0; }
+
+    @ConfigItem(keyName = "rangedThreshold", name = "Ranged XP Threshold", description = "Reset Ranged when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 4)
+    @Range(min = 0, max = 200000000)
+    default int rangedThreshold() { return 0; }
+
+    @ConfigItem(keyName = "prayerThreshold", name = "Prayer XP Threshold", description = "Reset Prayer when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 5)
+    @Range(min = 0, max = 200000000)
+    default int prayerThreshold() { return 0; }
+
+    @ConfigItem(keyName = "magicThreshold", name = "Magic XP Threshold", description = "Reset Magic when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 6)
+    @Range(min = 0, max = 200000000)
+    default int magicThreshold() { return 0; }
+
+    @ConfigItem(keyName = "runecraftThreshold", name = "Runecraft XP Threshold", description = "Reset Runecraft when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 7)
+    @Range(min = 0, max = 200000000)
+    default int runecraftThreshold() { return 0; }
+
+    @ConfigItem(keyName = "constructionThreshold", name = "Construction XP Threshold", description = "Reset Construction when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 8)
+    @Range(min = 0, max = 200000000)
+    default int constructionThreshold() { return 0; }
+
+    @ConfigItem(keyName = "hitpointsThreshold", name = "Hitpoints XP Threshold", description = "Reset Hitpoints when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 9)
+    @Range(min = 0, max = 200000000)
+    default int hitpointsThreshold() { return 0; }
+
+    @ConfigItem(keyName = "agilityThreshold", name = "Agility XP Threshold", description = "Reset Agility when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 10)
+    @Range(min = 0, max = 200000000)
+    default int agilityThreshold() { return 0; }
+
+    @ConfigItem(keyName = "herbloreThreshold", name = "Herblore XP Threshold", description = "Reset Herblore when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 11)
+    @Range(min = 0, max = 200000000)
+    default int herbloreThreshold() { return 0; }
+
+    @ConfigItem(keyName = "thievingThreshold", name = "Thieving XP Threshold", description = "Reset Thieving when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 12)
+    @Range(min = 0, max = 200000000)
+    default int thievingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "craftingThreshold", name = "Crafting XP Threshold", description = "Reset Crafting when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 13)
+    @Range(min = 0, max = 200000000)
+    default int craftingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "fletchingThreshold", name = "Fletching XP Threshold", description = "Reset Fletching when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 14)
+    @Range(min = 0, max = 200000000)
+    default int fletchingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "slayerThreshold", name = "Slayer XP Threshold", description = "Reset Slayer when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 15)
+    @Range(min = 0, max = 200000000)
+    default int slayerThreshold() { return 0; }
+
+    @ConfigItem(keyName = "hunterThreshold", name = "Hunter XP Threshold", description = "Reset Hunter when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 16)
+    @Range(min = 0, max = 200000000)
+    default int hunterThreshold() { return 0; }
+
+    @ConfigItem(keyName = "miningThreshold", name = "Mining XP Threshold", description = "Reset Mining when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 17)
+    @Range(min = 0, max = 200000000)
+    default int miningThreshold() { return 0; }
+
+    @ConfigItem(keyName = "smithingThreshold", name = "Smithing XP Threshold", description = "Reset Smithing when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 18)
+    @Range(min = 0, max = 200000000)
+    default int smithingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "fishingThreshold", name = "Fishing XP Threshold", description = "Reset Fishing when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 19)
+    @Range(min = 0, max = 200000000)
+    default int fishingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "cookingThreshold", name = "Cooking XP Threshold", description = "Reset Cooking when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 20)
+    @Range(min = 0, max = 200000000)
+    default int cookingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "firemakingThreshold", name = "Firemaking XP Threshold", description = "Reset Firemaking when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 21)
+    @Range(min = 0, max = 200000000)
+    default int firemakingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "woodcuttingThreshold", name = "Woodcutting XP Threshold", description = "Reset Woodcutting when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 22)
+    @Range(min = 0, max = 200000000)
+    default int woodcuttingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "farmingThreshold", name = "Farming XP Threshold", description = "Reset Farming when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 23)
+    @Range(min = 0, max = 200000000)
+    default int farmingThreshold() { return 0; }
+
+    @ConfigItem(keyName = "sailingThreshold", name = "Sailing XP Threshold", description = "Reset Sailing when XP reaches this amount (0 = never reset)", section = thresholdSection, position = 24)
+    @Range(min = 0, max = 200000000)
+    default int sailingThreshold() { return 0; }
+
     // Per-skill XP multipliers with override checkboxes
     @ConfigSection(name = "Attack", description = "Attack XP multiplier settings", position = 10, closedByDefault = true)
     String attackSection = "attackSection";
@@ -333,11 +446,25 @@ public interface NumberGoUpConfig extends Config
     @ConfigItem(keyName = "resetFarming", name = "Custom Mode: Reset Skill?", description = "Reset this skill when Custom mode is selected", section = farmingSection, position = 3)
     default boolean resetFarming() { return false; }
 
+    @ConfigSection(name = "Sailing", description = "Sailing XP multiplier settings", position = 33, closedByDefault = true)
+    String sailingSection = "sailingSection";
+
+    @ConfigItem(keyName = "overrideSailing", name = "Override Global Modifier", description = "Use custom XP modifier for Sailing instead of global", section = sailingSection, position = 1)
+    default boolean overrideSailing() { return false; }
+
+    @ConfigItem(keyName = "sailingMultiplier", name = "Sailing XP Modifier", description = "Multiplier for Sailing XP (only used if override is enabled)", section = sailingSection, position = 2)
+    @Range(min = 1, max = 15)
+    default double sailingMultiplier() { return 1.0; }
+
+    @ConfigItem(keyName = "resetSailing", name = "Custom Mode: Reset Skill?", description = "Reset this skill when Custom mode is selected", section = sailingSection, position = 3)
+    default boolean resetSailing() { return false; }
+
     enum ResetMode
     {
         ALL_SKILLS("All Skills"),
         ONLY_99S("Only Lvl 99 Skills"),
-        CUSTOM("Custom");
+        CUSTOM("Custom"),
+        PER_SKILL_THRESHOLD("Per Skill Threshold");
 
         private final String name;
 
