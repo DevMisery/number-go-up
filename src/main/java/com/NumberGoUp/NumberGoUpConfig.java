@@ -30,22 +30,19 @@ public interface NumberGoUpConfig extends Config
     )
     default ResetMode resetMode()
     {
-        return ResetMode.ALL_SKILLS;
+        return ResetMode.NONE; // Changed default to NONE
     }
 
-    // Reset progress button - we'll handle this differently in the plugin
     @ConfigItem(
-            keyName = "resetProgress",
-            name = "Reset All Progress",
-            description = "Reset all saved progress and start fresh from current XP",
-            position = 100
+            keyName = "keepProgressBetweenModes",
+            name = "Keep Progress Between Modes",
+            description = "When enabled, switching reset modes will preserve session XP for skills that are still being reset in the new mode"
     )
-    default boolean resetProgress()
+    default boolean keepProgressBetweenModes()
     {
-        return false;
+        return false; // Default false (reset progress when switching modes)
     }
 
-    // Rest of the file remains EXACTLY THE SAME as your original
     // Per-skill custom XP thresholds for THRESHOLD mode
     @ConfigSection(name = "Custom XP Thresholds", description = "Set custom XP thresholds for reset (only works with 'Per Skill Threshold' mode)", position = 5, closedByDefault = true)
     String thresholdSection = "thresholdSection";
@@ -461,10 +458,13 @@ public interface NumberGoUpConfig extends Config
 
     enum ResetMode
     {
+        NONE("None"),
         ALL_SKILLS("All Skills"),
-        ONLY_99S("Only Lvl 99 Skills"),
-        CUSTOM("Custom"),
-        PER_SKILL_THRESHOLD("Per Skill Threshold");
+        NINETY_NINES_ONLY("99's Only"),  // Changed from ONLY_99S to match requirements
+        COMBAT_ONLY("Combat Only"),
+        NON_COMBAT_ONLY("Non-combat Only"),
+        PER_SKILL_THRESHOLD("Per Skill Threshold"),
+        CUSTOM("Custom");
 
         private final String name;
 
