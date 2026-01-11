@@ -174,11 +174,6 @@ public class NumberGoUpPlugin extends Plugin
                         client.queueChangedSkill(skill);
                     }
                 }
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
             }
         });
     }
