@@ -277,7 +277,6 @@ public class NumberGoUpPlugin extends Plugin
         // If the keepProgressBetweenModes setting itself changed
         if (event.getKey().equals("keepProgressBetweenModes")) {
             log.info("Keep progress between modes changed to: {}", config.keepProgressBetweenModes());
-            // No immediate action needed - this will affect future mode changes
         }
 
         // If a custom reset checkbox changed and we're in custom mode, update that specific skill
